@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a1428;
+  --foreground: #f0e6d2;
 }
 
 @theme inline {
@@ -10,17 +10,94 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
+  --font-display: var(--font-cinzel);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Hextech palette */
+  --color-hx-black: #010a13;
+  --color-hx-navy: #0a1428;
+  --color-hx-navy-light: #0d1b2f;
+  --color-hx-panel: #0a1e2e;
+  --color-hx-border: #2a3b4d;
+  --color-hx-border-gold: #4a3a1c;
+  --color-hx-gold: #c8aa6e;
+  --color-hx-gold-bright: #f0e6d2;
+  --color-hx-gold-dim: #785a28;
+  --color-hx-grey: #a09b8c;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, #0d2b3e 0%, transparent 60%),
+    linear-gradient(180deg, #0a1428 0%, #050c16 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--color-hx-gold-dim);
+  color: var(--color-hx-gold-bright);
+}
+
+/* Reusable Hextech UI primitives */
+.hx-panel {
+  background: linear-gradient(180deg, #0d2135 0%, #081420 100%);
+  border: 1px solid var(--color-hx-border-gold);
+  box-shadow:
+    0 0 0 1px rgba(200, 170, 110, 0.06) inset,
+    0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.hx-title {
+  font-family: var(--font-display), serif;
+  color: var(--color-hx-gold-bright);
+  letter-spacing: 0.02em;
+}
+
+.hx-label {
+  color: var(--color-hx-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hx-btn-primary {
+  background: linear-gradient(180deg, #f0e6d2 0%, #c8aa6e 100%);
+  color: #010a13;
+  border: 1px solid var(--color-hx-gold-bright);
+  font-weight: 600;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.hx-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.hx-btn-primary:disabled {
+  opacity: 0.35;
+  filter: grayscale(0.4);
+}
+
+.hx-btn-secondary {
+  background: transparent;
+  color: var(--color-hx-gold-bright);
+  border: 1px solid var(--color-hx-gold-dim);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.hx-btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-hx-gold);
+  background: rgba(200, 170, 110, 0.08);
+}
+
+.hx-choice {
+  background: rgba(10, 30, 46, 0.6);
+  border: 1px solid var(--color-hx-border);
+  color: var(--color-hx-gold-bright);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.hx-choice:hover {
+  border-color: var(--color-hx-gold);
+  background: rgba(200, 170, 110, 0.08);
+}
+
+.hx-stat {
+  background: rgba(1, 10, 19, 0.5);
+  border: 1px solid var(--color-hx-border);
 }
