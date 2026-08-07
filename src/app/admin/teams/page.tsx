@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TeamBadge } from "@/components/TeamBadge";
 import type { TeamDefinition } from "@/content/teams";
 
 function normalize(row: Record<string, unknown>): TeamDefinition {
@@ -8,6 +9,7 @@ function normalize(row: Record<string, unknown>): TeamDefinition {
     id: row.id as string,
     name: row.name as string,
     tag: row.tag as string,
+    league: ((row.league as string) ?? "challengers") as "challengers" | "lck",
     primaryColor: (row.primary_color as string) ?? "#888888",
     secondaryColor: (row.secondary_color as string) ?? "#000000",
     colorConfirmed: true,
@@ -86,17 +88,7 @@ export default function AdminTeamsPage() {
       <div className="flex flex-col gap-3">
         {teams.map((team) => (
           <div key={team.id} className="hx-panel flex flex-wrap items-center gap-4 rounded-xl p-4">
-            {team.crestUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={team.crestUrl} alt={team.name} className="h-16 w-16 rounded-full border border-hx-gold object-cover" />
-            ) : (
-              <div
-                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-hx-gold font-bold"
-                style={{ backgroundColor: team.primaryColor, color: team.secondaryColor }}
-              >
-                {team.tag.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)}
-              </div>
-            )}
+            <TeamBadge team={team} size={64} />
 
             <div className="min-w-[180px] flex-1">
               <div className="font-medium text-hx-gold-bright">{team.name}</div>

@@ -151,3 +151,29 @@ export function rollStartingAttributes(role: Role): Record<AttributeId, number> 
 
   return result as Record<AttributeId, number>;
 }
+
+/**
+ * Rare "prodigy" roll (5% chance at career start, see careerStore.startCareer):
+ * boosted ranges so the average lands comfortably above 65, the threshold
+ * that skips Challengers and starts the career directly in the LCK.
+ */
+export function rollProdigyAttributes(role: Role): Record<AttributeId, number> {
+  const favorites = new Set(ROLE_FAVORITE_GENERAL_ATTRIBUTES[role]);
+  const result: Partial<Record<AttributeId, number>> = {};
+
+  for (const attr of GENERAL_ATTRIBUTES) {
+    result[attr.id] = favorites.has(attr.id) ? randomInt(68, 78) : randomInt(60, 72);
+  }
+  for (const id of ROLE_SPECIAL_ATTRIBUTES[role]) {
+    result[id] = randomInt(65, 82);
+  }
+
+  return result as Record<AttributeId, number>;
+}
+
+/** Average across a role's full attribute set — the "overall" shown in the UI and
+ *  used to gate LCK promotion events. */
+export function getOverall(attributes: Record<string, number>, role: Role): number {
+  const ids = getAttributesForRole(role);
+  return Math.round(ids.reduce((sum, id) => sum + (attributes[id] ?? 0), 0) / ids.length);
+}

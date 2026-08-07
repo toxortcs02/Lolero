@@ -9,20 +9,29 @@ export function TeamBadge({
 }) {
   if (team.crestUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- external, admin-uploaded URLs
-      <img
-        src={team.crestUrl}
-        alt={team.name}
+      <div
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-md border"
+        style={{
+          width: size,
+          height: size,
+          borderColor: "var(--color-hx-gold)",
+          backgroundColor: "var(--color-hx-navy-light)",
+        }}
         title={team.name}
-        className="shrink-0 rounded-full border object-cover"
-        style={{ width: size, height: size, borderColor: "var(--color-hx-gold)" }}
-      />
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- external, admin-uploaded URLs */}
+        <img
+          src={team.crestUrl}
+          alt={team.name}
+          className="h-full w-full object-contain p-0.5"
+        />
+      </div>
     );
   }
 
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-full border font-bold"
+      className="flex shrink-0 items-center justify-center rounded-md border font-bold"
       style={{
         width: size,
         height: size,

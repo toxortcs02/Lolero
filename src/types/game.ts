@@ -1,3 +1,5 @@
+import type { GeneralAttributeId, SpecialAttributeId } from "@/content/attributes";
+
 export type Role = "top" | "jungle" | "mid" | "adc" | "support";
 
 export type GameStatus =
@@ -41,6 +43,42 @@ export type EventCategory =
   | "role_specific"
   | "international";
 
+/** Narrative importance -> magnitude range used when writing effects.
+ *  minor ±3-8, medium ±8-15, major ±15-25. */
+export type EventTier = "minor" | "medium" | "major";
+
+export type RelationKey = keyof Relations;
+
+export interface EventEffects {
+  /** General events may only touch general attributes; role_specific events
+   *  may touch that role's special attributes. Never mix the two. */
+  attributes?: Partial<Record<GeneralAttributeId | SpecialAttributeId, number>>;
+  relations?: Partial<Record<RelationKey, number>>;
+}
+
+export interface EventChoice {
+  id: string;
+  label: string;
+  effects: EventEffects;
+  /** Short narrative shown after picking this choice, before returning to the hub. */
+  resolution: string;
+  /** Choice ends the career immediately (e.g. early retirement). */
+  endsCareer?: boolean;
+}
+
+/** A static (admin-editable) narrative event — as opposed to MaterializedEvent,
+ *  which is generated at pick-time for transfer-market events naming real teams. */
+export interface EventDefinition {
+  id: string;
+  category: EventCategory;
+  tier: EventTier;
+  title: string;
+  description: string;
+  /** Only fires for this role. Omit for events available to any role. */
+  role?: Role;
+  choices: EventChoice[];
+}
+
 /** A year is a fixed script of 9 local events across 3 phases, plus 3
  *  conditional international-tournament checkpoints in between. */
 export type Phase = "pretemporada" | "invierno" | "verano";
@@ -77,6 +115,13 @@ export interface MaterializedChoice {
   /** If set, picking this choice moves the player to this team id. */
   targetTeamId?: string;
   endsCareer?: boolean;
+  /** UI-only: if set, this choice renders as a rich team-offer card (crest, colors,
+   *  strength) instead of a plain text button. Set even for "stay/renew" choices
+   *  (pointing at the current team) — separate from targetTeamId so renewing
+   *  doesn't trigger the "joined a new club" logic in the store. */
+  displayTeamId?: string;
+  /** Short flavor tag shown on the offer card, e.g. "Grande", "Rival", "Renovación". */
+  offerStamp?: string;
 }
 
 export interface MaterializedEvent {
@@ -116,6 +161,9 @@ export interface CareerState {
   /** Set instead of a static EVENTS lookup when currentEventId is a
    *  transfer-market event that names real teams. */
   materializedEvent: MaterializedEvent | null;
+  /** Narrative event pool — defaults to the bundled static list, replaced by
+   *  the admin-edited Supabase list once useEvents() resolves (see hooks/useEvents.ts). */
+  events: EventDefinition[];
 }
 
 export interface CareerResult {

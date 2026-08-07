@@ -14,6 +14,7 @@ export async function GET() {
     id: t.id,
     name: t.name,
     tag: t.tag,
+    league: (t.league ?? "challengers") as "challengers" | "lck",
     primaryColor: t.primary_color,
     secondaryColor: t.secondary_color,
     colorConfirmed: true,

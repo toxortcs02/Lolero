@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCareerStore } from "@/store/careerStore";
 import { useTeams } from "@/hooks/useTeams";
+import { useEvents } from "@/hooks/useEvents";
 import { ROLES, ROLE_LABELS, STARTING_AGE } from "@/content/roles";
 import { ROLE_SPECIAL_ATTRIBUTES, ATTRIBUTE_LABELS } from "@/content/attributes";
 import type { Role } from "@/types/game";
@@ -12,6 +13,7 @@ export default function CrearPersonajePage() {
   const router = useRouter();
   const startCareer = useCareerStore((s) => s.startCareer);
   const teams = useTeams();
+  useEvents();
 
   const [nick, setNick] = useState("");
   const [role, setRole] = useState<Role>("mid");
@@ -23,14 +25,26 @@ export default function CrearPersonajePage() {
     if (!canSubmit) return;
 
     // El equipo se sortea recién al arrancar: se revela en /carrera, no acá.
-    const team = teams[Math.floor(Math.random() * teams.length)];
-    startCareer({
-      nick: nick.trim(),
-      role,
-      team: team.name,
-      league: "LCK Challengers",
-      age: STARTING_AGE,
-    });
+    // 5% de las carreras son "prodigio": arrancan directo en el equipo más
+    // débil de la LCK en vez de un Challengers al azar (ver careerStore.startCareer).
+    const lckTeams = teams.filter((t) => t.league === "lck");
+    const rookieTeams = teams.filter((t) => t.league === "challengers");
+    const isProdigy = lckTeams.length > 0 && Math.random() < 0.9;
+
+    const team = isProdigy
+      ? [...lckTeams].sort((a, b) => a.baseStrength - b.baseStrength)[0]
+      : rookieTeams[Math.floor(Math.random() * rookieTeams.length)];
+
+    startCareer(
+      {
+        nick: nick.trim(),
+        role,
+        team: team.name,
+        league: isProdigy ? "LCK" : "LCK Challengers",
+        age: STARTING_AGE,
+      },
+      isProdigy,
+    );
     router.push("/carrera");
   }
 

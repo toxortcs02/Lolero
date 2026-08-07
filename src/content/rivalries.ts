@@ -14,6 +14,18 @@ export const RIVAL_PAIRS: Record<string, string> = {
   "soop-c": "ns-c",
   "brion-c": "fearx-y",
   "fearx-y": "brion-c",
+
+  // LCK — mismas parejas por organización, un escalón más arriba.
+  "t1": "gen-g",
+  "gen-g": "t1",
+  "drx": "dplus",
+  "dplus": "drx",
+  "kt": "hle",
+  "hle": "kt",
+  "ns": "soop",
+  "soop": "ns",
+  "brion": "fearx",
+  "fearx": "brion",
 };
 
 export function getRivalTeamId(teamId: string): string | undefined {

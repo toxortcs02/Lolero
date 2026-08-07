@@ -69,6 +69,7 @@ body {
 }
 .hx-btn-primary:hover:not(:disabled) {
   filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 .hx-btn-primary:disabled {
   opacity: 0.35;
@@ -79,25 +80,62 @@ body {
   background: transparent;
   color: var(--color-hx-gold-bright);
   border: 1px solid var(--color-hx-gold-dim);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 .hx-btn-secondary:hover:not(:disabled) {
   border-color: var(--color-hx-gold);
   background: rgba(200, 170, 110, 0.08);
+  transform: translateY(-1px);
 }
 
 .hx-choice {
   background: rgba(10, 30, 46, 0.6);
   border: 1px solid var(--color-hx-border);
   color: var(--color-hx-gold-bright);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 .hx-choice:hover {
   border-color: var(--color-hx-gold);
   background: rgba(200, 170, 110, 0.08);
+  transform: translateY(-1px);
 }
 
 .hx-stat {
   background: rgba(1, 10, 19, 0.5);
   border: 1px solid var(--color-hx-border);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.hx-stat:hover {
+  border-color: var(--color-hx-gold-dim);
+  background: rgba(1, 10, 19, 0.75);
+}
+
+.hx-stat-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chip/pill para etiquetas de contexto (fase de temporada, "Decisión", etc.) */
+.hx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.16), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  color: var(--color-hx-gold);
+}
+
+/* Línea divisoria sutil entre grupos de stats */
+.hx-divider {
+  height: 1px;
+  background: rgba(200, 170, 110, 0.12);
+}
+
+/* Card de oferta de club (mercado de pases) */
+.hx-offer-card {
+  background: linear-gradient(180deg, #0d2135 0%, #081420 100%);
+  border: 1px solid var(--color-hx-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.hx-offer-card:hover {
+  border-color: var(--color-hx-gold);
 }

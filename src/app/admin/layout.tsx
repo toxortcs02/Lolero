@@ -22,6 +22,9 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
           <Link href="/admin/teams" className="hx-label text-xs font-medium">
             Equipos
           </Link>
+          <Link href="/admin/events" className="hx-label text-xs font-medium">
+            Eventos
+          </Link>
         </div>
         <button onClick={handleLogout} className="text-xs text-hx-grey hover:text-hx-gold-bright">
           Cerrar sesión

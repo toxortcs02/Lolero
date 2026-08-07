@@ -1,41 +1,16 @@
-import type { EventCategory, Relations, Role } from "@/types/game";
-import type { GeneralAttributeId, SpecialAttributeId } from "@/content/attributes";
+// Types live in @/types/game (not here) so both this static content file and
+// the DB-backed admin editor can share one definition without a circular
+// import — content/events.ts just re-exports them for existing call sites.
+import type {
+  EventCategory,
+  EventChoice,
+  EventDefinition,
+  EventEffects,
+  EventTier,
+  RelationKey,
+} from "@/types/game";
 
-export type { EventCategory };
-
-/** Narrative importance -> magnitude range used when writing effects below. */
-export type EventTier = "minor" | "medium" | "major";
-// minor  ±3-8   medium ±8-15   major ±15-25
-
-export type RelationKey = keyof Relations;
-
-export interface EventEffects {
-  /** General events may only touch general attributes; role_specific events
-   *  may touch that role's special attributes. Never mix the two. */
-  attributes?: Partial<Record<GeneralAttributeId | SpecialAttributeId, number>>;
-  relations?: Partial<Record<RelationKey, number>>;
-}
-
-export interface EventChoice {
-  id: string;
-  label: string;
-  effects: EventEffects;
-  /** Short narrative shown after picking this choice, before returning to the hub. */
-  resolution: string;
-  /** Choice ends the career immediately (e.g. early retirement). */
-  endsCareer?: boolean;
-}
-
-export interface EventDefinition {
-  id: string;
-  category: EventCategory;
-  tier: EventTier;
-  title: string;
-  description: string;
-  /** Only fires for this role. Omit for events available to any role. */
-  role?: Role;
-  choices: EventChoice[];
-}
+export type { EventCategory, EventChoice, EventDefinition, EventEffects, EventTier, RelationKey };
 
 export const EVENTS: EventDefinition[] = [
   // ── Transferencias y carrera ──────────────────────────────────────────
@@ -81,44 +56,10 @@ export const EVENTS: EventDefinition[] = [
       },
     ],
   },
-  {
-    id: "transfer_lck_callup",
-    category: "transfers",
-    tier: "major",
-    title: "Llamado al roster principal LCK",
-    description:
-      "Tu organización evalúa subirte al roster titular de la LCK.",
-    choices: [
-      {
-        id: "accept",
-        label: "Aceptar de inmediato",
-        effects: { relations: { prestige: 20, teamTrust: 10, mentalHealth: -8 } },
-        resolution:
-          "Subís al roster principal. Es el salto que soñabas, pero la presión del primer equipo pega fuerte desde el día uno.",
-      },
-      {
-        id: "guarantees",
-        label: "Pedir garantías de minutos antes de aceptar",
-        effects: { relations: { prestige: 10, teamTrust: -8 } },
-        resolution:
-          "Negociás minutos garantizados. El management valora tu cabeza fría, aunque la conversación se sintió incómoda.",
-      },
-      {
-        id: "decline",
-        label: "Rechazar y quedarte donde sos titular",
-        effects: { relations: { fanLoyalty: 15, teamTrust: 10, prestige: -10 } },
-        resolution:
-          "Preferís seguir siendo titular en Challengers. La afición local te idolatra por elegirlos a ellos.",
-      },
-      {
-        id: "negotiate_salary",
-        label: "Negociar mejor salario antes de subir",
-        effects: { relations: { prestige: 12, teamTrust: -12 } },
-        resolution:
-          "Conseguís el número que querías, pero arrancar el nuevo capítulo negociando plata deja mal sabor en la organización.",
-      },
-    ],
-  },
+  // transfer_lck_callup ya no vive acá: careerStore.advance() lo dispara de
+  // forma explícita (edad + overall + 5% de probabilidad) vía
+  // buildAcademyCallupEvent, no se sortea al azar por categoría — ver el
+  // diseño de ascenso a LCK en careerStore.ts.
   {
     id: "transfer_foreign_offer",
     category: "transfers",

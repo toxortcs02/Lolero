@@ -6,7 +6,7 @@ import type {
   Role,
   TournamentTier,
 } from "@/types/game";
-import { EVENTS } from "@/content/events";
+import type { EventDefinition } from "@/content/events";
 
 export const PHASE_LABELS: Record<Phase, string> = {
   pretemporada: "Pretemporada",
@@ -56,13 +56,16 @@ export function buildYearPlan(): PhaseSlot[] {
   ];
 }
 
-/** Picks a random event for a category, avoiding this year's repeats when possible. */
+/** Picks a random event for a category, avoiding this year's repeats when possible.
+ *  Takes the event pool as a parameter (not a module-level import) so callers can
+ *  pass the admin-edited, DB-backed list instead of the bundled static one. */
 export function pickEventId(
+  events: EventDefinition[],
   category: EventCategory,
   role: Role,
   excludeIds: string[],
 ): string {
-  const pool = EVENTS.filter(
+  const pool = events.filter(
     (e) => e.category === category && (e.role === undefined || e.role === role),
   );
   const fresh = pool.filter((e) => !excludeIds.includes(e.id));
