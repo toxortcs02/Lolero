@@ -15,19 +15,28 @@ import {
 } from "@/content/attributes";
 import { PHASE_LABELS, TOURNAMENT_LABELS } from "@/content/seasonPlan";
 import { isPositiveResult } from "@/content/matchSim";
-import { PLAYOFF_STAGE_LABELS } from "@/content/playoffs";
 import { getApodo } from "@/content/apodos";
 import { getFictionalOffer } from "@/content/offerFlavor";
 import { getBarColor, getLolRank } from "@/content/relationBars";
 import { TeamBadge } from "@/components/TeamBadge";
 import type { TeamDefinition } from "@/content/teams";
-import type { LeagueStanding, MaterializedChoice, Relations, Role, RosterSlot } from "@/types/game";
+import type {
+  LeagueStanding,
+  MaterializedChoice,
+  Phase,
+  PhaseSlot,
+  Relations,
+  Role,
+  RosterSlot,
+  TournamentTier,
+  YearSummary,
+} from "@/types/game";
 
 const RELATION_LABELS: Record<keyof Relations, string> = {
   teamTrust: "Confianza equipo",
   fanLoyalty: "Fidelidad fans",
   prestige: "Prestigio",
-  mentalHealth: "Salud mental",
+  mentalHealth: "Moral",
 };
 
 export default function CarreraHubPage() {
@@ -52,6 +61,10 @@ export default function CarreraHubPage() {
   const careerStats = useCareerStore((s) => s.careerStats);
   const yearSummary = useCareerStore((s) => s.yearSummary);
   const lastMatchResult = useCareerStore((s) => s.lastMatchResult);
+  const coachName = useCareerStore((s) => s.coachName);
+  const contract = useCareerStore((s) => s.contract);
+  const ladder = useCareerStore((s) => s.ladder);
+  const savings = useCareerStore((s) => s.savings);
   const teams = useTeams();
   useEvents();
   const [rolling, setRolling] = useState(false);
@@ -111,6 +124,13 @@ export default function CarreraHubPage() {
             playerNick={character.nick}
             playerRole={character.role}
             roster={roster}
+            coachName={coachName}
+            teamTrust={relations.teamTrust}
+            careerStats={careerStats}
+            contract={contract}
+            ladder={ladder}
+            splitsPlayed={season}
+            savings={savings}
           />
         )}
 
@@ -130,10 +150,11 @@ export default function CarreraHubPage() {
               {character.team} · {ROLE_LABELS[character.role]}
             </p>
             <p className="text-xs text-hx-grey">
-              {character.age} años · {yearsPlaying} temporadas jugadas · Temporada {season}
-              {phaseTag ? ` · ${phaseTag}` : ""}
+              {character.age} años · {yearsPlaying} temporadas jugadas
             </p>
           </div>
+
+          <SeasonProgressBar season={season} slotIndex={slotIndex} planLength={yearPlan.length} currentSlot={currentSlot} phaseTag={phaseTag} />
 
           <div className="hx-divider" />
 
@@ -146,7 +167,7 @@ export default function CarreraHubPage() {
               showRank
             />
             <RelationBar
-              label="Salud mental"
+              label="Moral"
               value={relations.mentalHealth}
               delta={lastEffects?.relations.mentalHealth}
             />
@@ -200,7 +221,13 @@ export default function CarreraHubPage() {
                 transition={{ duration: 0.18 }}
                 className="flex flex-1 flex-col"
               >
-                <YearSummaryPanel summary={yearSummary} careerStats={careerStats} onContinue={advance} />
+                <YearSummaryPanel
+                  summary={yearSummary}
+                  careerStats={careerStats}
+                  team={team}
+                  overall={overall}
+                  onContinue={advance}
+                />
               </motion.div>
             ) : currentEvent ? (
               <motion.div
@@ -289,6 +316,7 @@ export default function CarreraHubPage() {
                   </motion.div>
                 )}
                 <p className="text-xl font-semibold leading-relaxed text-hx-gold-bright">{lastResolution}</p>
+                {lastEffects && <EffectPills effects={lastEffects} />}
                 <motion.button
                   onClick={advance}
                   whileTap={{ scale: 0.98 }}
@@ -338,17 +366,138 @@ export default function CarreraHubPage() {
   );
 }
 
+/** Colored pill per stat that changed on the last resolved choice — attributes
+ *  and relations alike, including the ones hidden from the main panel (this
+ *  is contextual, in-the-moment feedback, not a permanent stat display). */
+function EffectPills({
+  effects,
+}: {
+  effects: { attributes: Record<string, number>; relations: Record<string, number> };
+}) {
+  const entries = [
+    ...Object.entries(effects.attributes ?? {}).map(([key, value]) => ({
+      label: ATTRIBUTE_LABELS[key as keyof typeof ATTRIBUTE_LABELS] ?? key,
+      value,
+    })),
+    ...Object.entries(effects.relations ?? {}).map(([key, value]) => ({
+      label: RELATION_LABELS[key as keyof Relations] ?? key,
+      value,
+    })),
+  ].filter((e) => e.value);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {entries.map((e, i) => (
+        <motion.span
+          key={`${e.label}-${i}`}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.05 * i }}
+          className={`rounded px-3 py-1.5 text-sm font-bold ${
+            e.value > 0 ? "bg-emerald-900/40 text-emerald-400" : "bg-red-900/40 text-red-400"
+          }`}
+        >
+          {e.value > 0 ? "+" : ""}
+          {Math.round(e.value)} {e.label}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+
+const PHASE_STEP_ORDER: Phase[] = ["pretemporada", "invierno", "verano"];
+const PHASE_STEP_LABELS: Record<Phase, string> = {
+  pretemporada: "Pretemporada",
+  invierno: "Invierno",
+  verano: "Verano",
+};
+/** Tournament checkpoints sit right after the phase they belong to, for
+ *  highlighting purposes on the bar. */
+const TOURNAMENT_PHASE: Record<TournamentTier, Phase> = {
+  first_stand: "pretemporada",
+  msi: "invierno",
+  worlds: "verano",
+};
+
+function SeasonProgressBar({
+  season,
+  slotIndex,
+  planLength,
+  currentSlot,
+  phaseTag,
+}: {
+  season: number;
+  slotIndex: number;
+  planLength: number;
+  currentSlot: PhaseSlot | undefined;
+  phaseTag: string | null;
+}) {
+  const activePhase: Phase | null = !currentSlot
+    ? null
+    : currentSlot.type === "event"
+      ? currentSlot.phase
+      : TOURNAMENT_PHASE[currentSlot.tier];
+  const pct = planLength > 1 ? Math.max(0, Math.min(100, (slotIndex / (planLength - 1)) * 100)) : 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="hx-title text-4xl font-bold leading-none">Año {season}</span>
+        {phaseTag && (
+          <span className="hx-badge rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide">
+            {phaseTag}
+          </span>
+        )}
+      </div>
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-hx-border">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-hx-gold-bright transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wide text-hx-grey">
+        {PHASE_STEP_ORDER.map((phase) => (
+          <span key={phase} className={phase === activePhase ? "text-hx-gold-bright" : ""}>
+            {PHASE_STEP_LABELS[phase]}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamRosterPanel({
   team,
   playerNick,
   playerRole,
   roster,
+  coachName,
+  teamTrust,
+  careerStats,
+  contract,
+  ladder,
+  splitsPlayed,
+  savings,
 }: {
   team: TeamDefinition;
   playerNick: string;
   playerRole: Role;
   roster: RosterSlot[];
+  coachName: string;
+  teamTrust: number;
+  careerStats: CareerStatsShape;
+  contract: { salaryPerYear: number; yearsRemaining: number };
+  ladder: { tier: string; lp: number; rankPosition?: string; gamesThisSplit: number };
+  splitsPlayed: number;
+  savings: number;
 }) {
+  const form =
+    careerStats.matchesWithCurrentTeam > 0
+      ? formatWr(careerStats.winsWithCurrentTeam, careerStats.matchesWithCurrentTeam)
+      : 50;
+
   return (
     <section className="hx-panel group flex min-h-[500px] min-w-[400px] w-full flex-col gap-3  rounded-xl p-4 lg:w-[260px] lg:flex-shrink-0">
       <h2 className="hx-label text-xs font-medium">Tu equipo</h2>
@@ -386,6 +535,69 @@ function TeamRosterPanel({
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="hx-divider" />
+
+      <div className="flex flex-col gap-1.5">
+        <h3 className="hx-label text-xs font-medium">Plantel</h3>
+        <ul className="flex flex-col gap-1 text-xs text-hx-grey">
+          <li className="flex justify-between">
+            <span>Form</span>
+            <span className="font-semibold text-hx-gold-bright">{form}</span>
+          </li>
+          <li className="flex justify-between">
+            <span>Química con {team.tag}</span>
+            <span className="font-semibold text-hx-gold-bright">{Math.round(teamTrust)}</span>
+          </li>
+          <li className="flex justify-between">
+            <span>Coach</span>
+            <span className="font-semibold text-hx-gold-bright">{coachName}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="hx-divider" />
+
+      <div className="flex flex-col gap-1.5">
+        <h3 className="hx-label text-xs font-medium">Contrato</h3>
+        <ul className="flex flex-col gap-1 text-xs text-hx-grey">
+          <li className="flex justify-between">
+            <span>Ahorros</span>
+            <span className="font-semibold text-hx-gold-bright">
+              €{savings.toLocaleString("es-AR")}
+            </span>
+          </li>
+          <li className="flex justify-between">
+            <span>Salario</span>
+            <span className="font-semibold text-hx-gold-bright">
+              €{contract.salaryPerYear.toLocaleString("es-AR")} / año
+            </span>
+          </li>
+          <li className="flex justify-between">
+            <span>Restante</span>
+            <span className="font-semibold text-hx-gold-bright">
+              {contract.yearsRemaining} año{contract.yearsRemaining !== 1 ? "s" : ""}
+            </span>
+          </li>
+          <li className="flex justify-between">
+            <span>Splits jugados</span>
+            <span className="font-semibold text-hx-gold-bright">{splitsPlayed}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="hx-divider" />
+
+      <div className="flex flex-col gap-1.5">
+        <h3 className="hx-label text-xs font-medium">Solo queue</h3>
+        <div className="flex items-baseline justify-between">
+          <span className="font-semibold text-hx-gold-bright">
+            {ladder.tier} {ladder.lp} LP
+          </span>
+          {ladder.rankPosition && <span className="text-xs text-hx-grey">{ladder.rankPosition}</span>}
+        </div>
+        <p className="text-xs text-hx-grey">{ladder.gamesThisSplit} partidas en soloQ este split.</p>
       </div>
     </section>
   );
@@ -508,60 +720,145 @@ interface CareerStatsShape {
 
 /** Shown when a season rolls over — recap of that year plus the career-to-date record,
  *  before the next year's first event loads (see yearSummary in careerStore.ts). */
+function ObjectiveRow({ label, met }: { label: string; met: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-hx-grey">{label}</span>
+      <span
+        className={`inline-flex size-5 shrink-0 items-center justify-center rounded ${
+          met ? "bg-emerald-900/50 text-emerald-400" : "bg-red-900/50 text-red-400"
+        }`}
+      >
+        {met ? "✓" : "✕"}
+      </span>
+    </div>
+  );
+}
+
 function YearSummaryPanel({
   summary,
   careerStats,
+  team,
+  overall,
   onContinue,
 }: {
-  summary: {
-    season: number;
-    kills: number;
-    deaths: number;
-    assists: number;
-    matchesPlayed: number;
-    wins: number;
-    titles: number;
-    standingPosition: number;
-    totalTeams: number;
-    playoffStage: keyof typeof PLAYOFF_STAGE_LABELS;
-  };
+  summary: YearSummary;
   careerStats: CareerStatsShape;
+  team?: TeamDefinition;
+  overall: number;
   onContinue: () => void;
 }) {
-  const kda = formatKda;
-  const wr = formatWr;
+  const losses = summary.matchesPlayed - summary.wins;
   const madePlayoffs = summary.playoffStage !== "no_qualified";
+  const netTotalClass = summary.earnings.total >= 0 ? "text-lime-500" : "text-red-400";
 
   return (
     <div className="flex flex-1 flex-col gap-5">
-      <div className="flex flex-col gap-1.5">
-        <span className="hx-badge w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider">
-          Fin de temporada
+      <div className="flex flex-col gap-2">
+        <span className="hx-label text-xs font-medium">
+          Temporada {summary.season} — Split
         </span>
-        <h2 className="hx-title text-3xl font-bold sm:text-4xl">Temporada {summary.season}</h2>
-        <p className="text-lg font-semibold text-hx-gold-bright">
-          {summary.standingPosition}° de {summary.totalTeams} en la fase regular
-        </p>
-        <p className={`text-lg font-bold ${madePlayoffs ? "text-emerald-400" : "text-hx-grey"}`}>
-          {summary.playoffStage === "champion" ? "🏆 " : madePlayoffs ? "⚔️ " : ""}
-          {PLAYOFF_STAGE_LABELS[summary.playoffStage]}
-        </p>
-        {summary.titles > 0 && (
-          <p className="text-base font-bold text-hx-gold-bright">
-            🏆 {summary.titles} título{summary.titles > 1 ? "s" : ""} ganado{summary.titles > 1 ? "s" : ""} este año
-          </p>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="hx-badge w-fit rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+            {summary.teamTier}
+          </span>
+          {team && <TeamBadge team={team} size={24} />}
+          <span className="text-sm font-bold text-hx-gold-bright">{summary.teamName}</span>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h3 className="hx-label text-xs font-medium">Esta temporada ({summary.matchesPlayed} partidos)</h3>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          <StatBlock label="KDA" value={kda(summary.kills, summary.deaths, summary.assists)} />
-          <StatBlock label="Partidos" value={String(summary.matchesPlayed)} />
-          <StatBlock label="WR%" value={`${wr(summary.wins, summary.matchesPlayed)}%`} />
-          <StatBlock label="Victorias" value={String(summary.wins)} />
-          <StatBlock label="Títulos" value={String(summary.titles)} />
+      <p className="border-l-2 border-hx-gold pl-3 text-base italic leading-relaxed text-hx-grey">
+        {summary.headline}
+      </p>
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        <div className="flex flex-col gap-1.5">
+          <h3 className="hx-label text-xs font-medium">Stats</h3>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-hx-grey">Partidos</span>
+            <span className="font-semibold text-hx-gold-bright">{summary.matchesPlayed}</span>
+          </div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-hx-grey">KDA</span>
+            <span className="font-semibold text-hx-gold-bright">
+              {formatKda(summary.kills, summary.deaths, summary.assists)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-hx-grey">Rating</span>
+            <span className="font-semibold text-hx-gold-bright">{overall}</span>
+          </div>
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <h3 className="hx-label text-xs font-medium">Resultados</h3>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-hx-grey">Récord</span>
+            <span className="font-semibold text-hx-gold-bright">
+              {summary.wins}-{losses}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-hx-grey">Posición</span>
+            <span className="font-semibold text-hx-gold-bright">
+              {summary.standingPosition}° / {summary.totalTeams}
+            </span>
+          </div>
+          <ObjectiveRow label="Playoffs" met={madePlayoffs} />
+        </div>
+      </div>
+
+      <div className="hx-stat flex items-center justify-between gap-3 rounded-lg px-4 py-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="hx-label text-[10px]">Ranking mundial</span>
+          <span className="text-sm font-semibold text-hx-gold-bright">{summary.worldRankBucket}</span>
+        </div>
+        <span className="shrink-0 text-lg font-bold tabular-nums text-hx-grey">#{summary.worldRank}</span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <h3 className="hx-label text-xs font-medium">Objetivo del club</h3>
+        <ObjectiveRow label={summary.objective.label} met={summary.objective.met} />
+      </div>
+
+      <div className="hx-stat flex flex-col gap-1.5 rounded-lg p-4">
+        <h3 className="hx-label text-xs font-medium">Ingresos de la temporada</h3>
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-hx-grey">Salario</span>
+          <span className="font-semibold text-hx-gold-bright">
+            €{summary.earnings.salary.toLocaleString("es-AR")}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-hx-grey">Sponsors</span>
+          <span className="font-semibold text-hx-gold-bright">
+            €{summary.earnings.sponsors.toLocaleString("es-AR")}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-hx-grey">Bono por rendimiento</span>
+          <span className="font-semibold text-hx-gold-bright">
+            €{summary.earnings.bonus.toLocaleString("es-AR")}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-hx-grey">Gastos de vida</span>
+          <span className="font-semibold text-red-400">
+            −€{Math.abs(summary.earnings.livingCosts).toLocaleString("es-AR")}
+          </span>
+        </div>
+        <div className="hx-divider my-1" />
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-hx-grey">Total</span>
+          <span className={`font-bold ${netTotalClass}`}>
+            €{summary.earnings.total.toLocaleString("es-AR")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <h3 className="hx-label text-xs font-medium">En el resto del mundo</h3>
+        <p className="text-sm leading-relaxed text-hx-grey">{summary.elsewhereFlavor}</p>
       </div>
 
       <div className="hx-divider" />
@@ -571,13 +868,13 @@ function YearSummaryPanel({
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           <StatBlock
             label="KDA"
-            value={kda(careerStats.kills, careerStats.deaths, careerStats.assists)}
+            value={formatKda(careerStats.kills, careerStats.deaths, careerStats.assists)}
           />
           <StatBlock label="Partidos" value={String(careerStats.matchesPlayed)} />
-          <StatBlock label="WR%" value={`${wr(careerStats.wins, careerStats.matchesPlayed)}%`} />
+          <StatBlock label="WR%" value={`${formatWr(careerStats.wins, careerStats.matchesPlayed)}%`} />
           <StatBlock
             label="WR% equipo actual"
-            value={`${wr(careerStats.winsWithCurrentTeam, careerStats.matchesWithCurrentTeam)}%`}
+            value={`${formatWr(careerStats.winsWithCurrentTeam, careerStats.matchesWithCurrentTeam)}%`}
           />
           <StatBlock label="Títulos" value={String(careerStats.titles)} />
         </div>

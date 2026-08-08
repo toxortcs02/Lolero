@@ -9,10 +9,20 @@ import {
   STARTING_ATTRIBUTE_VALUE,
 } from "@/content/attributes";
 import { MAX_CAREER_AGE } from "@/content/roles";
-import { generateRoster } from "@/content/rosterNames";
+import { generateCoachName, generateRoster } from "@/content/rosterNames";
 import { computeStandings } from "@/content/leagueSim";
 import { simulateMatch, simulateSplit } from "@/content/matchSim";
 import { simulatePlayoffs } from "@/content/playoffs";
+import { rollContract } from "@/content/contracts";
+import { rollLadder } from "@/content/ladder";
+import {
+  computeSplitEarnings,
+  getOrgObjective,
+  pickElsewhereFlavor,
+  pickHeadline,
+  rollWorldRanking,
+  tierLabelForTeam,
+} from "@/content/splitSummary";
 import { TEAMS } from "@/content/teams";
 import {
   buildYearPlan,
@@ -106,6 +116,10 @@ const initialState: CareerState = {
   seasonStats: ZERO_STATS,
   yearSummary: null,
   lastMatchResult: null,
+  coachName: "",
+  contract: { salaryPerYear: 0, yearsRemaining: 0 },
+  ladder: { tier: "Hierro", lp: 0, gamesThisSplit: 0 },
+  savings: 0,
 };
 
 export const useCareerStore = create<CareerState & CareerActions>((set, get) => ({
@@ -113,13 +127,16 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
 
   startCareer: (character, isProdigy = false) => {
     const playerTeamId = teamIdForName(character.team);
+    const playerTeam = TEAMS.find((t) => t.id === playerTeamId) ?? TEAMS[0];
+    const attributes = isProdigy
+      ? rollProdigyAttributes(character.role)
+      : rollStartingAttributes(character.role);
+    const overall = getOverall(attributes, character.role);
     set({
       character,
       status: "in_season",
       season: 1,
-      attributes: isProdigy
-        ? rollProdigyAttributes(character.role)
-        : rollStartingAttributes(character.role),
+      attributes,
       yearPlan: buildYearPlan(),
       slotIndex: -1,
       seenEventIdsThisYear: [],
@@ -134,6 +151,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       seasonStats: ZERO_STATS,
       yearSummary: null,
       lastMatchResult: null,
+      coachName: generateCoachName(),
+      contract: rollContract(playerTeam, overall),
+      ladder: rollLadder(attributes.hands ?? STARTING_ATTRIBUTE_VALUE),
+      savings: 0,
     });
     // Resolve the first slot synchronously here instead of leaving it to a
     // page-level effect: under React StrictMode dev double-invoke, an
@@ -179,10 +200,11 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         }
 
         const endedTeamId = teamIdForName(character.team);
+        const endedTeam = TEAMS.find((t) => t.id === endedTeamId);
         const standingPosition =
           state.leagueStandings.findIndex((s) => s.teamId === endedTeamId) + 1;
         const totalTeams = state.leagueStandings.length;
-        const teamStrength = TEAMS.find((t) => t.id === endedTeamId)?.baseStrength ?? 5;
+        const teamStrength = endedTeam?.baseStrength ?? 5;
         const overall = getOverall(state.attributes, character.role);
         const playoffStage = simulatePlayoffs(
           standingPosition || totalTeams,
@@ -194,12 +216,26 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         const endedSeasonStats = wonPlayoffs
           ? { ...state.seasonStats, titles: state.seasonStats.titles + 1 }
           : state.seasonStats;
+        const earnings = computeSplitEarnings(
+          state.contract.salaryPerYear,
+          state.relations.fanLoyalty,
+          playoffStage,
+        );
+        const worldRanking = rollWorldRanking(overall, state.relations.prestige);
         const yearSummary = {
           season,
           ...endedSeasonStats,
           standingPosition: standingPosition || totalTeams,
           totalTeams,
           playoffStage,
+          teamName: endedTeam?.name ?? character.team,
+          teamTier: endedTeam ? tierLabelForTeam(endedTeam) : "",
+          worldRank: worldRanking.rank,
+          worldRankBucket: worldRanking.bucket,
+          objective: getOrgObjective(teamStrength, playoffStage),
+          earnings,
+          headline: pickHeadline(character.nick, endedTeam?.name ?? character.team, playoffStage),
+          elsewhereFlavor: pickElsewhereFlavor(),
         };
         const careerStats = wonPlayoffs
           ? { ...state.careerStats, titles: state.careerStats.titles + 1 }
@@ -215,6 +251,14 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           teamIdForName(character.team),
           state.relations.prestige,
         );
+        // New split on the ladder too — solo queue is independent of the team's year.
+        const ladder = rollLadder(state.attributes.hands ?? STARTING_ATTRIBUTE_VALUE);
+        const contract = {
+          ...state.contract,
+          yearsRemaining: Math.max(0, state.contract.yearsRemaining - 1),
+        };
+        // Bank that year's earnings (salary + sponsors + bonus - living costs).
+        const savings = state.savings + earnings.total;
 
         // Pause here instead of looping straight into the new year's first
         // slot: the UI shows a recap of the season that just ended (see
@@ -235,6 +279,9 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           careerStats,
           seasonStats: ZERO_STATS,
           yearSummary,
+          ladder,
+          contract,
+          savings,
         });
         return;
       }
@@ -375,6 +422,8 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       let roster = state.roster;
       let leagueStandings = state.leagueStandings;
       let careerStats = state.careerStats;
+      let coachName = state.coachName;
+      let contract = state.contract;
 
       if (choice.targetTeamId) {
         const newTeam = TEAMS.find((t) => t.id === choice.targetTeamId);
@@ -385,6 +434,14 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           leagueStandings = computeStandings(leagueTeams(newTeam.id), newTeam.id, relations.prestige);
           // New club, new "WR% con el equipo actual" record.
           careerStats = { ...careerStats, matchesWithCurrentTeam: 0, winsWithCurrentTeam: 0 };
+          coachName = generateCoachName();
+          contract = rollContract(newTeam, getOverall(state.attributes, character.role));
+        }
+      } else if (materializedEvent.id === "transfer_contract_end" && choice.id === "renew_loyal") {
+        // Same club, fresh contract terms.
+        const currentTeam = TEAMS.find((t) => t.id === teamIdForName(character.team));
+        if (currentTeam) {
+          contract = rollContract(currentTeam, getOverall(state.attributes, character.role));
         }
       }
 
@@ -394,6 +451,8 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         roster,
         leagueStandings,
         careerStats,
+        coachName,
+        contract,
         history: [...state.history, logEntry],
         currentEventId: null,
         materializedEvent: null,

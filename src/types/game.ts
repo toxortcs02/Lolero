@@ -1,6 +1,9 @@
 import type { GeneralAttributeId, SpecialAttributeId } from "@/content/attributes";
 import type { MatchResult } from "@/content/matchSim";
 import type { PlayoffStage } from "@/content/playoffs";
+import type { ContractInfo } from "@/content/contracts";
+import type { LadderInfo } from "@/content/ladder";
+import type { OrgObjective, SplitEarnings } from "@/content/splitSummary";
 
 export type Role = "top" | "jungle" | "mid" | "adc" | "support";
 
@@ -132,6 +135,14 @@ export interface YearSummary {
   standingPosition: number;
   totalTeams: number;
   playoffStage: PlayoffStage;
+  teamName: string;
+  teamTier: string;
+  worldRank: number;
+  worldRankBucket: string;
+  objective: OrgObjective;
+  earnings: SplitEarnings;
+  headline: string;
+  elsewhereFlavor: string;
 }
 
 /**
@@ -207,6 +218,17 @@ export interface CareerState {
   /** Result of the last "competitive"/"international" choice — record + KDA, shown
    *  alongside lastResolution. Null for choices that don't represent a match. */
   lastMatchResult: MatchResult | null;
+  /** Fictional head coach of the current team — rolled alongside the roster,
+   *  regenerated on transfer. */
+  coachName: string;
+  /** Cosmetic salary/contract length — see content/contracts.ts. */
+  contract: ContractInfo;
+  /** Cosmetic solo-queue ladder rank, separate from team results — recomputed
+   *  each season from "Manos". See content/ladder.ts. */
+  ladder: LadderInfo;
+  /** Accumulated savings, in euros — banks the full contract.salaryPerYear at
+   *  each year rollover. No expenses modeled yet, so this only ever grows. */
+  savings: number;
 }
 
 export interface CareerResult {

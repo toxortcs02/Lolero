@@ -28,3 +28,8 @@ export function generateRoster(playerRole: Role): RosterSlot[] {
   const nicks = shuffle(FICTIONAL_NICKS).slice(0, otherRoles.length);
   return otherRoles.map((role, i) => ({ role, nick: nicks[i] }));
 }
+
+/** Rolls a fictional head coach name for the current team. */
+export function generateCoachName(): string {
+  return shuffle(FICTIONAL_NICKS)[0];
+}
