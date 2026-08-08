@@ -258,7 +258,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "train_harder",
         label: "Entrenar el doble para asegurar el puesto",
-        effects: { attributes: { consistency: 8 }, relations: { mentalHealth: -8 } },
+        effects: { attributes: { hands: 8 }, relations: { mentalHealth: -8 } },
         resolution:
           "Te metés horas extra de práctica. Te aseguras el puesto, pero llegás agotado a fin de mes.",
       },
@@ -366,7 +366,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "compete",
         label: "Competir por el protagonismo",
-        effects: { attributes: { consistency: 5 }, relations: { teamTrust: -8, mentalHealth: -6 } },
+        effects: { attributes: { clutch: 5 }, relations: { teamTrust: -8, mentalHealth: -6 } },
         resolution:
           "Subís tu nivel para no quedar opacado. Rendís mejor, pero la convivencia con la nueva estrella se pone tensa.",
       },
@@ -822,7 +822,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "extra_practice",
         label: "Entrenar extra",
-        effects: { attributes: { consistency: 5 }, relations: { mentalHealth: -6 } },
+        effects: { attributes: { hands: 5 }, relations: { mentalHealth: -6 } },
         resolution: "Redoblás la práctica para salir de la racha. Mejora el rendimiento, pero te cuesta la cabeza.",
       },
       {
@@ -934,7 +934,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "safe_play",
         label: "Jugar conservador y seguro",
-        effects: { attributes: { consistency: 5 }, relations: { mentalHealth: 5 } },
+        effects: { attributes: { clutch: 5 }, relations: { mentalHealth: 5 } },
         resolution: "Jugás sin sobresaltos y cerrás el partido con la cabeza fría. El título llega sin dramatismo.",
       },
       {
@@ -969,7 +969,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "extra_scrims",
         label: "Meter scrims extra",
-        effects: { attributes: { consistency: 5 }, relations: { mentalHealth: -8 } },
+        effects: { attributes: { hands: 5 }, relations: { mentalHealth: -8 } },
         resolution: "Suman scrims extra para corregir errores. Mejora el nivel, pero llegan a playoffs cansados.",
       },
       {
@@ -1125,7 +1125,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "safe_play",
         label: "Jugar conservador y seguro",
-        effects: { attributes: { consistency: 5 }, relations: { mentalHealth: 5, prestige: 8 } },
+        effects: { attributes: { clutch: 5 }, relations: { mentalHealth: 5, prestige: 8 } },
         resolution: "Juegan con la cabeza fría en su debut internacional. El resultado no es espectacular, pero es sólido.",
       },
       {
@@ -1160,7 +1160,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "safe_play",
         label: "Jugar conservador y seguro",
-        effects: { attributes: { consistency: 8 }, relations: { mentalHealth: 8, prestige: 15 } },
+        effects: { attributes: { clutch: 8 }, relations: { mentalHealth: 8, prestige: 15 } },
         resolution: "Juegan con paciencia contra el nivel internacional. El resultado consolida el nombre del equipo afuera de Corea.",
       },
       {
@@ -1195,7 +1195,7 @@ export const EVENTS: EventDefinition[] = [
       {
         id: "safe_play",
         label: "Jugar conservador y seguro",
-        effects: { attributes: { consistency: 10 }, relations: { mentalHealth: 10, prestige: 20 } },
+        effects: { attributes: { clutch: 10 }, relations: { mentalHealth: 10, prestige: 20 } },
         resolution: "Cierran su participación en Worlds sin sobresaltos. Es un resultado que va a quedar en tu currículum para siempre.",
       },
       {

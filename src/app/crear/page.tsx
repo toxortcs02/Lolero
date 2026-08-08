@@ -29,7 +29,7 @@ export default function CrearPersonajePage() {
     // débil de la LCK en vez de un Challengers al azar (ver careerStore.startCareer).
     const lckTeams = teams.filter((t) => t.league === "lck");
     const rookieTeams = teams.filter((t) => t.league === "challengers");
-    const isProdigy = lckTeams.length > 0 && Math.random() < 0.9;
+    const isProdigy = lckTeams.length > 0 && Math.random() < 0.05;
 
     const team = isProdigy
       ? [...lckTeams].sort((a, b) => a.baseStrength - b.baseStrength)[0]

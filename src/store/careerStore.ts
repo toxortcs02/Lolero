@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { CareerState, Character, DecisionLogEntry } from "@/types/game";
+import type { CareerState, CareerStats, Character, DecisionLogEntry } from "@/types/game";
 import { LCK_CALLUP_MIN_AGE } from "@/types/game";
 import { EVENTS } from "@/content/events";
 import {
@@ -11,6 +11,8 @@ import {
 import { MAX_CAREER_AGE } from "@/content/roles";
 import { generateRoster } from "@/content/rosterNames";
 import { computeStandings } from "@/content/leagueSim";
+import { simulateMatch, simulateSplit } from "@/content/matchSim";
+import { simulatePlayoffs } from "@/content/playoffs";
 import { TEAMS } from "@/content/teams";
 import {
   buildYearPlan,
@@ -54,6 +56,17 @@ function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, value));
 }
 
+const ZERO_STATS: CareerStats = {
+  kills: 0,
+  deaths: 0,
+  assists: 0,
+  matchesPlayed: 0,
+  wins: 0,
+  titles: 0,
+  matchesWithCurrentTeam: 0,
+  winsWithCurrentTeam: 0,
+};
+
 interface CareerActions {
   /** isProdigy: rare boosted roll (see crear/page.tsx) — career starts directly in LCK. */
   startCareer: (character: Character, isProdigy?: boolean) => void;
@@ -89,6 +102,10 @@ const initialState: CareerState = {
   leagueStandings: [],
   materializedEvent: null,
   events: EVENTS,
+  careerStats: ZERO_STATS,
+  seasonStats: ZERO_STATS,
+  yearSummary: null,
+  lastMatchResult: null,
 };
 
 export const useCareerStore = create<CareerState & CareerActions>((set, get) => ({
@@ -113,6 +130,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       roster: generateRoster(character.role),
       leagueStandings: computeStandings(leagueTeams(playerTeamId), playerTeamId, 0),
       materializedEvent: null,
+      careerStats: ZERO_STATS,
+      seasonStats: ZERO_STATS,
+      yearSummary: null,
+      lastMatchResult: null,
     });
     // Resolve the first slot synchronously here instead of leaving it to a
     // page-level effect: under React StrictMode dev double-invoke, an
@@ -130,7 +151,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
     // after startCareer. The team is already assigned at this point (rolled
     // in /crear) — there's no prior club to be "transferred" from, so this
     // must never render as a market/rival-offer event, see buildDebutEvent.
-    const isCareerDebut = state.slotIndex === -1;
+    // (slotIndex alone isn't enough to detect this: every year-end pause
+    // below also parks slotIndex at -1, so the season===1 check is what
+    // actually distinguishes "career debut" from "resuming after a recap".)
+    const isCareerDebut = state.slotIndex === -1 && state.season === 1;
 
     let idx = state.slotIndex + 1;
     let plan = state.yearPlan;
@@ -138,9 +162,11 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
     let character = state.character;
     let seen = state.seenEventIdsThisYear;
     let leagueStandings = state.leagueStandings;
-    // Set right before a season rolls over, from the standings that season
-    // just ended with — checked at the new season's transfers slot below.
-    let finishedFirst = false;
+    // Set right before a season rolls over, from the playoff run the season
+    // just ended with — checked at the new season's transfers slot below
+    // (a playoffs championship, not just topping the table, is what earns
+    // the "league champion" transfer-offer treatment next season).
+    let wonPlayoffs = false;
 
     // Loop past tournament slots the player didn't qualify for, and roll
     // over into a new year when the current one's plan is exhausted.
@@ -151,19 +177,66 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           set({ status: "retired", retirementReason: "age" });
           return;
         }
-        finishedFirst = state.leagueStandings[0]?.teamId === teamIdForName(character.team);
+
+        const endedTeamId = teamIdForName(character.team);
+        const standingPosition =
+          state.leagueStandings.findIndex((s) => s.teamId === endedTeamId) + 1;
+        const totalTeams = state.leagueStandings.length;
+        const teamStrength = TEAMS.find((t) => t.id === endedTeamId)?.baseStrength ?? 5;
+        const overall = getOverall(state.attributes, character.role);
+        const playoffStage = simulatePlayoffs(
+          standingPosition || totalTeams,
+          overall,
+          teamStrength,
+        );
+        wonPlayoffs = playoffStage === "champion";
+
+        const endedSeasonStats = wonPlayoffs
+          ? { ...state.seasonStats, titles: state.seasonStats.titles + 1 }
+          : state.seasonStats;
+        const yearSummary = {
+          season,
+          ...endedSeasonStats,
+          standingPosition: standingPosition || totalTeams,
+          totalTeams,
+          playoffStage,
+        };
+        const careerStats = wonPlayoffs
+          ? { ...state.careerStats, titles: state.careerStats.titles + 1 }
+          : state.careerStats;
+
         character = { ...character, age: nextAge };
         season += 1;
         plan = buildYearPlan();
         seen = [];
-        idx = 0;
         // New season, new (cosmetic) league table — your prestige weighs in.
         leagueStandings = computeStandings(
           leagueTeams(teamIdForName(character.team)),
           teamIdForName(character.team),
           state.relations.prestige,
         );
-        continue;
+
+        // Pause here instead of looping straight into the new year's first
+        // slot: the UI shows a recap of the season that just ended (see
+        // yearSummary in page.tsx) until the player clicks through it.
+        set({
+          character,
+          season,
+          yearPlan: plan,
+          slotIndex: -1,
+          seenEventIdsThisYear: seen,
+          currentEventId: null,
+          status: "in_season",
+          lastEffects: null,
+          lastResolution: null,
+          lastMatchResult: null,
+          leagueStandings,
+          materializedEvent: null,
+          careerStats,
+          seasonStats: ZERO_STATS,
+          yearSummary,
+        });
+        return;
       }
 
       const slot = plan[idx];
@@ -183,8 +256,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           status: "event",
           lastEffects: null,
           lastResolution: null,
+          lastMatchResult: null,
           leagueStandings,
           materializedEvent: null,
+          yearSummary: null,
         });
         return;
       }
@@ -208,8 +283,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
             status: "event",
             lastEffects: null,
             lastResolution: null,
+            lastMatchResult: null,
             leagueStandings,
             materializedEvent: debutEvent,
+            yearSummary: null,
           });
           return;
         }
@@ -218,7 +295,7 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
 
         if (playerLeague === "challengers") {
           const overall = getOverall(state.attributes, character.role);
-          const promoEvent = finishedFirst
+          const promoEvent = wonPlayoffs
             ? buildLeagueChampionOffersEvent(TEAMS, playerTeamId)
             : overall >= TIER1_OFFERS_OVERALL_THRESHOLD
               ? buildTier1OffersEvent(TEAMS, playerTeamId)
@@ -239,8 +316,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
               status: "event",
               lastEffects: null,
               lastResolution: null,
+              lastMatchResult: null,
               leagueStandings,
               materializedEvent: promoEvent,
+              yearSummary: null,
             });
             return;
           }
@@ -262,8 +341,10 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         status: "event",
         lastEffects: null,
         lastResolution: null,
+        lastMatchResult: null,
         leagueStandings,
         materializedEvent,
+        yearSummary: null,
       });
       return;
     }
@@ -293,6 +374,7 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       let nextCharacter = character;
       let roster = state.roster;
       let leagueStandings = state.leagueStandings;
+      let careerStats = state.careerStats;
 
       if (choice.targetTeamId) {
         const newTeam = TEAMS.find((t) => t.id === choice.targetTeamId);
@@ -301,6 +383,8 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           relations.teamTrust = 50; // fresh relationship with the new club
           roster = generateRoster(character.role);
           leagueStandings = computeStandings(leagueTeams(newTeam.id), newTeam.id, relations.prestige);
+          // New club, new "WR% con el equipo actual" record.
+          careerStats = { ...careerStats, matchesWithCurrentTeam: 0, winsWithCurrentTeam: 0 };
         }
       }
 
@@ -309,6 +393,7 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         relations,
         roster,
         leagueStandings,
+        careerStats,
         history: [...state.history, logEntry],
         currentEventId: null,
         materializedEvent: null,
@@ -323,6 +408,7 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
             ? "stats"
             : null,
         lastEffects: { attributes: {}, relations: choice.relationEffects },
+        lastMatchResult: null,
         lastResolution: choice.resolution,
       });
       return;
@@ -330,7 +416,8 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
 
     const event = state.events.find((e) => e.id === state.currentEventId);
     const choice = event?.choices.find((c) => c.id === choiceId);
-    if (!event || !choice) return;
+    if (!event || !choice || !state.character) return;
+    const character = state.character;
 
     const attributes = { ...state.attributes };
     for (const [key, delta] of Object.entries(choice.effects.attributes ?? {})) {
@@ -371,6 +458,46 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
 
     const forcedOut = relations.teamTrust <= 0 || relations.mentalHealth <= 0;
 
+    // "competitive" and "international" are the categories that narratively
+    // represent an actual match — everything else (transfers, locker room,
+    // media, personal) is off-pitch and doesn't touch match stats.
+    let careerStats = state.careerStats;
+    let seasonStats = state.seasonStats;
+    let lastMatchResult: CareerState["lastMatchResult"] = null;
+
+    if (event.category === "competitive" || event.category === "international") {
+      const playerTeamId = teamIdForName(character.team);
+      const teamStrength = TEAMS.find((t) => t.id === playerTeamId)?.baseStrength ?? 5;
+      const overall = getOverall(attributes, character.role);
+      // "competitive" is the once-a-year regular-season slot: it represents
+      // the whole 18-game split at once, not a single game. Tournament
+      // checkpoints (international) stay a single deciding match.
+      const result =
+        event.category === "competitive"
+          ? simulateSplit(character.role, overall, teamStrength)
+          : simulateMatch(character.role, overall, teamStrength);
+      lastMatchResult = result;
+
+      seasonStats = {
+        ...seasonStats,
+        kills: seasonStats.kills + result.kills,
+        deaths: seasonStats.deaths + result.deaths,
+        assists: seasonStats.assists + result.assists,
+        matchesPlayed: seasonStats.matchesPlayed + result.gamesPlayed,
+        wins: seasonStats.wins + result.wins,
+      };
+      careerStats = {
+        ...careerStats,
+        kills: careerStats.kills + result.kills,
+        deaths: careerStats.deaths + result.deaths,
+        assists: careerStats.assists + result.assists,
+        matchesPlayed: careerStats.matchesPlayed + result.gamesPlayed,
+        wins: careerStats.wins + result.wins,
+        matchesWithCurrentTeam: careerStats.matchesWithCurrentTeam + result.gamesPlayed,
+        winsWithCurrentTeam: careerStats.winsWithCurrentTeam + result.wins,
+      };
+    }
+
     set({
       attributes,
       relations,
@@ -380,6 +507,9 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       retirementReason: forcedOut ? "stats" : null,
       lastEffects,
       lastResolution: choice.resolution,
+      lastMatchResult,
+      careerStats,
+      seasonStats,
     });
   },
 

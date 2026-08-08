@@ -43,6 +43,13 @@ const RELATION_LABELS: Record<keyof Relations, string> = {
 };
 const RELATION_KEYS = Object.keys(RELATION_LABELS) as (keyof Relations)[];
 
+/** Every attribute id that currently exists in the game — used to drop any
+ *  stale/renamed key (e.g. from an old seed) a saved event might still carry. */
+const VALID_ATTRIBUTE_IDS: Set<string> = new Set([
+  ...GENERAL_ATTRIBUTES.map((a) => a.id as string),
+  ...SPECIAL_ATTRIBUTES.map((a) => a.id as string),
+]);
+
 function blankChoice(): EventChoice {
   return { id: `choice_${Math.random().toString(36).slice(2, 8)}`, label: "", effects: {}, resolution: "" };
 }
@@ -58,10 +65,13 @@ function blankEvent(): EventDefinition {
   };
 }
 
-/** Strips zero-valued deltas so the saved payload only carries real effects. */
+/** Strips zero-valued deltas and any attribute id that no longer exists,
+ *  so the saved payload only carries real, current effects. */
 function cleanChoice(choice: EventChoice): EventChoice {
   const attributes = Object.fromEntries(
-    Object.entries(choice.effects.attributes ?? {}).filter(([, v]) => v),
+    Object.entries(choice.effects.attributes ?? {}).filter(
+      ([k, v]) => v && VALID_ATTRIBUTE_IDS.has(k),
+    ),
   );
   const relations = Object.fromEntries(
     Object.entries(choice.effects.relations ?? {}).filter(([, v]) => v),

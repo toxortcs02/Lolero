@@ -1,4 +1,6 @@
 import type { GeneralAttributeId, SpecialAttributeId } from "@/content/attributes";
+import type { MatchResult } from "@/content/matchSim";
+import type { PlayoffStage } from "@/content/playoffs";
 
 export type Role = "top" | "jungle" | "mid" | "adc" | "support";
 
@@ -102,6 +104,37 @@ export interface LeagueStanding {
 }
 
 /**
+ * Career-long totals — kills/deaths/assists/matchesPlayed/wins/titles never
+ * reset. matchesWithCurrentTeam/winsWithCurrentTeam do reset (to 0) whenever
+ * the player joins a new team, so "WR% con el equipo actual" stays honest.
+ */
+export interface CareerStats {
+  kills: number;
+  deaths: number;
+  assists: number;
+  matchesPlayed: number;
+  wins: number;
+  titles: number;
+  matchesWithCurrentTeam: number;
+  winsWithCurrentTeam: number;
+}
+
+/** Snapshot of that season's stats, frozen at year-end for the recap screen. */
+export interface YearSummary {
+  season: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  matchesPlayed: number;
+  wins: number;
+  titles: number;
+  /** Regular-season finish, 1-indexed (1 = first place). 0 if unknown. */
+  standingPosition: number;
+  totalTeams: number;
+  playoffStage: PlayoffStage;
+}
+
+/**
  * Transfer-market events (rival offer, four offers, contract end) name real
  * teams at pick-time, so they're materialized dynamically instead of living
  * as static content — self-contained here (relations-only effects) to avoid
@@ -164,6 +197,16 @@ export interface CareerState {
   /** Narrative event pool — defaults to the bundled static list, replaced by
    *  the admin-edited Supabase list once useEvents() resolves (see hooks/useEvents.ts). */
   events: EventDefinition[];
+  /** Career-long totals — see CareerStats. */
+  careerStats: CareerStats;
+  /** Resets to 0 every year rollover; snapshotted into yearSummary right before resetting. */
+  seasonStats: CareerStats;
+  /** Set at year-end (see advance()), cleared as soon as the next event/tournament loads.
+   *  While set, the UI shows a recap screen instead of the next event. */
+  yearSummary: YearSummary | null;
+  /** Result of the last "competitive"/"international" choice — record + KDA, shown
+   *  alongside lastResolution. Null for choices that don't represent a match. */
+  lastMatchResult: MatchResult | null;
 }
 
 export interface CareerResult {
