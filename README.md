@@ -1,5 +1,4 @@
 #TODO
-Agregar: KDA - PARTIDOS JUGADOS - WR% - WR% EN EQUIPO ACTUAL - TITULOS
 
 Sistema de rival
 

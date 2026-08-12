@@ -321,7 +321,7 @@ export default function CarreraHubPage() {
                         ? "🏆 Victoria"
                         : "💀 Derrota"}
                     {" · "}
-                    {lastMatchResult.kills}/{lastMatchResult.deaths}/{lastMatchResult.assists} KDA
+                     KDA {((lastMatchResult.kills+lastMatchResult.assists)/lastMatchResult.deaths).toFixed(2)}
                   </motion.div>
                 )}
                 <p className="text-xl font-semibold leading-relaxed text-hx-gold-bright">{lastResolution}</p>
