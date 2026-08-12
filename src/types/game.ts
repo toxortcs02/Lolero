@@ -229,6 +229,22 @@ export interface CareerState {
   /** Accumulated savings, in euros — banks the full contract.salaryPerYear at
    *  each year rollover. No expenses modeled yet, so this only ever grows. */
   savings: number;
+  /** Set when a tournament checkpoint or a playoffs qualification triggers a
+   *  role-specific "big moment" decision (status becomes "match", UI redirects
+   *  to /carrera/partido) — see content/bigMoments.ts. Cleared by resolveBigMoment(). */
+  pendingBigMoment: PendingBigMoment | null;
+  /** Year-end recap, fully computed but held back while a playoffs big moment
+   *  resolves — revealed into `yearSummary` by resolveBigMoment() once the
+   *  player decides. Null outside of that brief window. */
+  pendingYearSummary: YearSummary | null;
+}
+
+export interface PendingBigMoment {
+  bigMomentId: string;
+  /** "tournament": simulateMatch() runs fresh when the choice resolves.
+   *  "playoffs": the bracket run already happened — see pendingYearSummary. */
+  kind: "tournament" | "playoffs";
+  teamStrength: number;
 }
 
 export interface CareerResult {

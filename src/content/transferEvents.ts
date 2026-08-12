@@ -178,28 +178,66 @@ export function buildDebutEvent(
 ): MaterializedEvent {
   const team = teams.find((t) => t.id === currentTeamId);
   const isLck = team?.league === "lck";
-  const teamName = team?.name ?? "tu nuevo equipo";
+
+  if (isLck) {
+    // Jugador excepcional: esto casi no pasa — varios clubes de LCK se
+    // pelean por vos antes de tu primer partido profesional. Dos grandes
+    // garantizados, más 1 o 2 extra al azar (así el total sale 3 ó 4).
+    const lckTeams = teams.filter((t) => t.league === "lck");
+    const byStrength = [...lckTeams].sort((a, b) => b.baseStrength - a.baseStrength);
+    const bigClubs = byStrength.slice(0, 2);
+    const extraPool = shuffle(byStrength.slice(2));
+    const extraCount = Math.random() < 0.5 ? 1 : 2;
+    const offers = [...bigClubs, ...extraPool.slice(0, extraCount)];
+
+    return {
+      id: "career_debut",
+      title: "🌟 Un debut fuera de lo común",
+      description:
+        "Esto no le pasa a cualquiera: ni siquiera jugaste tu primer partido profesional y ya hay varios clubes de la LCK peleándose por tu firma. Cuántos te llaman depende de qué tan fuerte resonó tu nombre en el scouting — hoy fueron varios.",
+      choices: offers.map((offerTeam, i) => ({
+        id: `offer_${i}`,
+        label: `Firmar con ${offerTeam.name}`,
+        relationEffects:
+          i === 0
+            ? { prestige: 20, mentalHealth: -8 }
+            : i === 1
+              ? { prestige: 15, mentalHealth: -5 }
+              : { prestige: 10, fanLoyalty: 8 },
+        targetTeamId: offerTeam.id,
+        displayTeamId: offerTeam.id,
+        offerStamp: i < 2 ? "Bombazo" : "LCK",
+        resolution: `Firmás con ${offerTeam.name}. Arrancás tu carrera profesional directo en la primera división — algo que casi nadie logra a tu edad.`,
+      })),
+    };
+  }
+
+  // Jugador promedio: tryouts / te llamaron por tu desempeño en solo queue.
+  // El club de tus pruebas siempre está en la lista, más 3-5 clubes de
+  // Challengers extra al azar (total: 4 a 6 ofertas).
+  const rookieTeams = teams.filter((t) => t.league === "challengers");
+  const tryoutTeam = team ?? rookieTeams[0];
+  const others = shuffle(rookieTeams.filter((t) => t.id !== tryoutTeam.id));
+  const extraCount = Math.floor(Math.random() * 3) + 3; // 3, 4 ó 5 extra
+  const offers = [tryoutTeam, ...others.slice(0, extraCount)];
 
   return {
     id: "career_debut",
-    title: isLck ? "🌟 Te llueven ofertas" : "Arrancás tu carrera",
-    description: isLck
-      ? `Te llueven ofertas por tu gran talento para estar en la principal categoría de tu región. Firmás con ${teamName}.`
-      : `Te ofrecen unirte a la Liga Challengers de Corea. Firmás con ${teamName}.`,
-    choices: [
-      {
-        id: "humble",
-        label: "Aceptar con humildad, con ganas de demostrar",
-        relationEffects: { teamTrust: 10, fanLoyalty: 8 },
-        resolution: "Llegás con los pies en la tierra. El vestuario te recibe bien desde el primer día.",
-      },
-      {
-        id: "confident",
-        label: "Aceptar con confianza, sabés lo que valés",
-        relationEffects: { prestige: 8, teamTrust: -5 },
-        resolution: "Llegás mostrando seguridad. Algunos lo respetan, otros esperan que se lo demuestres en la Rift.",
-      },
-    ],
+    title: "Arrancás tu carrera",
+    description: `Después de tryouts y buenos resultados en solo queue, varios equipos de Challengers se fijaron en vos. Es hora de firmar tu primer contrato profesional.`,
+    choices: offers.map((offerTeam, i) => ({
+      id: `offer_${i}`,
+      label: `Firmar con ${offerTeam.name}`,
+      relationEffects:
+        i === 0 ? { teamTrust: 10, fanLoyalty: 8 } : { prestige: 5, fanLoyalty: 3 },
+      targetTeamId: offerTeam.id,
+      displayTeamId: offerTeam.id,
+      offerStamp: i === 0 ? "Debut" : "Oferta",
+      resolution:
+        i === 0
+          ? `Firmás tu primer contrato profesional con ${offerTeam.name}, el club que te hizo probar. Arranca tu carrera.`
+          : `Firmás con ${offerTeam.name}. No fue el club de tus pruebas, pero vieron algo en vos igual.`,
+    })),
   };
 }
 

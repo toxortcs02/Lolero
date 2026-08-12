@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { AttributeId } from "@/content/attributes";
 import type { CareerState, CareerStats, Character, DecisionLogEntry } from "@/types/game";
 import { LCK_CALLUP_MIN_AGE } from "@/types/game";
 import { EVENTS } from "@/content/events";
@@ -11,10 +12,11 @@ import {
 import { MAX_CAREER_AGE } from "@/content/roles";
 import { generateCoachName, generateRoster } from "@/content/rosterNames";
 import { computeStandings } from "@/content/leagueSim";
-import { simulateMatch, simulateSplit } from "@/content/matchSim";
-import { simulatePlayoffs } from "@/content/playoffs";
+import { applyPlayoffAdjustment, simulateMatch, simulateSplit } from "@/content/matchSim";
+import { PLAYOFF_SPOTS, simulatePlayoffs } from "@/content/playoffs";
 import { rollContract } from "@/content/contracts";
 import { rollLadder } from "@/content/ladder";
+import { getBigMoment, pickBigMoment } from "@/content/bigMoments";
 import {
   computeSplitEarnings,
   getOrgObjective,
@@ -78,12 +80,20 @@ const ZERO_STATS: CareerStats = {
 };
 
 interface CareerActions {
-  /** isProdigy: rare boosted roll (see crear/page.tsx) — career starts directly in LCK. */
-  startCareer: (character: Character, isProdigy?: boolean) => void;
+  /** isProdigy: rare boosted roll (see crear/page.tsx) — career starts directly in LCK.
+   *  styleBoosts: attribute points from the chosen game style, added on top of the roll. */
+  startCareer: (
+    character: Character,
+    isProdigy?: boolean,
+    styleBoosts?: Partial<Record<AttributeId, number>>,
+  ) => void;
   /** Advances to the next slot in the year plan: an event, a qualifying
    *  tournament, or (if the plan is exhausted) the start of a new year. */
   advance: () => void;
   resolveEventChoice: (choiceId: string) => void;
+  /** Resolves a tournament/playoffs "big moment" decision — see content/bigMoments.ts
+   *  and /carrera/partido. Only valid while pendingBigMoment is set. */
+  resolveBigMoment: (optionId: string) => void;
   reset: () => void;
   /** Replaces the event pool with the admin-edited, DB-backed list — see hooks/useEvents.ts. */
   setEvents: (events: CareerState["events"]) => void;
@@ -120,17 +130,23 @@ const initialState: CareerState = {
   contract: { salaryPerYear: 0, yearsRemaining: 0 },
   ladder: { tier: "Hierro", lp: 0, gamesThisSplit: 0 },
   savings: 0,
+  pendingBigMoment: null,
+  pendingYearSummary: null,
 };
 
 export const useCareerStore = create<CareerState & CareerActions>((set, get) => ({
   ...initialState,
 
-  startCareer: (character, isProdigy = false) => {
+  startCareer: (character, isProdigy = false, styleBoosts) => {
     const playerTeamId = teamIdForName(character.team);
     const playerTeam = TEAMS.find((t) => t.id === playerTeamId) ?? TEAMS[0];
-    const attributes = isProdigy
+    const rolled = isProdigy
       ? rollProdigyAttributes(character.role)
       : rollStartingAttributes(character.role);
+    const attributes = { ...rolled };
+    for (const [key, delta] of Object.entries(styleBoosts ?? {})) {
+      attributes[key] = clamp((attributes[key] ?? STARTING_ATTRIBUTE_VALUE) + (delta ?? 0));
+    }
     const overall = getOverall(attributes, character.role);
     set({
       character,
@@ -152,7 +168,11 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       yearSummary: null,
       lastMatchResult: null,
       coachName: generateCoachName(),
-      contract: rollContract(playerTeam, overall),
+      contract: rollContract(playerTeam, overall, character.age, {
+        prestige: 0,
+        fanLoyalty: 50,
+        isOpportunity: true,
+      }),
       ladder: rollLadder(attributes.hands ?? STARTING_ATTRIBUTE_VALUE),
       savings: 0,
     });
@@ -213,9 +233,16 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         );
         wonPlayoffs = playoffStage === "champion";
 
+        // Fold how the playoff run went into the season's KDA recap — the
+        // regular-season split's stats already reflect win/loss margin, this
+        // layers the playoff result on top the same way (see matchSim.ts).
+        const playoffAdjustedStats = {
+          ...state.seasonStats,
+          ...applyPlayoffAdjustment(state.seasonStats, playoffStage),
+        };
         const endedSeasonStats = wonPlayoffs
-          ? { ...state.seasonStats, titles: state.seasonStats.titles + 1 }
-          : state.seasonStats;
+          ? { ...playoffAdjustedStats, titles: state.seasonStats.titles + 1 }
+          : playoffAdjustedStats;
         const earnings = computeSplitEarnings(
           state.contract.salaryPerYear,
           state.relations.fanLoyalty,
@@ -260,6 +287,39 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
         // Bank that year's earnings (salary + sponsors + bonus - living costs).
         const savings = state.savings + earnings.total;
 
+        // Playoffs qualifiers get a "big moment" decision before the recap
+        // reveals — the bracket result above is already final either way
+        // (see resolveBigMoment: personal roll OR'd with playoffStage), this
+        // only holds the recap back for a beat while the player decides.
+        const qualifiedForPlayoffs = (standingPosition || totalTeams) <= PLAYOFF_SPOTS;
+
+        if (qualifiedForPlayoffs) {
+          const bigMoment = pickBigMoment(character.role);
+          set({
+            character,
+            season,
+            yearPlan: plan,
+            slotIndex: -1,
+            seenEventIdsThisYear: seen,
+            currentEventId: null,
+            status: "match",
+            lastEffects: null,
+            lastResolution: null,
+            lastMatchResult: null,
+            leagueStandings,
+            materializedEvent: null,
+            careerStats,
+            seasonStats: ZERO_STATS,
+            yearSummary: null,
+            ladder,
+            contract,
+            savings,
+            pendingBigMoment: { bigMomentId: bigMoment.id, kind: "playoffs", teamStrength },
+            pendingYearSummary: yearSummary,
+          });
+          return;
+        }
+
         // Pause here instead of looping straight into the new year's first
         // slot: the UI shows a recap of the season that just ended (see
         // yearSummary in page.tsx) until the player clicks through it.
@@ -293,6 +353,11 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           idx += 1;
           continue;
         }
+        // Torneo internacional: en vez del evento genérico de antes, un
+        // "gran momento" específico del rol — ver content/bigMoments.ts y
+        // /carrera/partido. status "match" saca al jugador del hub.
+        const bigMoment = pickBigMoment(character.role);
+        const teamStrength = TEAMS.find((t) => t.id === teamIdForName(character.team))?.baseStrength ?? 5;
         set({
           character,
           season,
@@ -300,13 +365,14 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           slotIndex: idx,
           seenEventIdsThisYear: seen,
           currentEventId: TOURNAMENT_EVENT_IDS[slot.tier],
-          status: "event",
+          status: "match",
           lastEffects: null,
           lastResolution: null,
           lastMatchResult: null,
           leagueStandings,
           materializedEvent: null,
           yearSummary: null,
+          pendingBigMoment: { bigMomentId: bigMoment.id, kind: "tournament", teamStrength },
         });
         return;
       }
@@ -435,13 +501,22 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
           // New club, new "WR% con el equipo actual" record.
           careerStats = { ...careerStats, matchesWithCurrentTeam: 0, winsWithCurrentTeam: 0 };
           coachName = generateCoachName();
-          contract = rollContract(newTeam, getOverall(state.attributes, character.role));
+          const isChampionOffer = materializedEvent.id === "league_champion_offers";
+          contract = rollContract(newTeam, getOverall(state.attributes, character.role), character.age, {
+            prestige: relations.prestige,
+            fanLoyalty: relations.fanLoyalty,
+            isOpportunity: !isChampionOffer,
+            isChampion: isChampionOffer,
+          });
         }
       } else if (materializedEvent.id === "transfer_contract_end" && choice.id === "renew_loyal") {
-        // Same club, fresh contract terms.
+        // Same club, fresh contract terms — already proven there, not a fresh "opportunity".
         const currentTeam = TEAMS.find((t) => t.id === teamIdForName(character.team));
         if (currentTeam) {
-          contract = rollContract(currentTeam, getOverall(state.attributes, character.role));
+          contract = rollContract(currentTeam, getOverall(state.attributes, character.role), character.age, {
+            prestige: relations.prestige,
+            fanLoyalty: relations.fanLoyalty,
+          });
         }
       }
 
@@ -569,6 +644,98 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       lastMatchResult,
       careerStats,
       seasonStats,
+    });
+  },
+
+  resolveBigMoment: (optionId) => {
+    const state = get();
+    const pending = state.pendingBigMoment;
+    const character = state.character;
+    if (!pending || !character) return;
+
+    const bigMoment = getBigMoment(pending.bigMomentId);
+    const option = bigMoment?.options.find((o) => o.id === optionId);
+    if (!bigMoment || !option) return;
+
+    // Personal roll: base chance nudged by the relevant stat (50 = neutral),
+    // same shape as matchSim's overallFactor. See content/bigMoments.ts.
+    const statValue = state.attributes[option.statId] ?? STARTING_ATTRIBUTE_VALUE;
+    const chance = Math.min(0.9, Math.max(0.1, option.baseChance + (statValue - 50) / 200));
+    const personalWin = Math.random() < chance;
+
+    const overall = getOverall(state.attributes, character.role);
+    let matchWon = false;
+    let lastMatchResult: CareerState["lastMatchResult"] = null;
+    let careerStats = state.careerStats;
+    let seasonStats = state.seasonStats;
+
+    if (pending.kind === "tournament") {
+      const result = simulateMatch(character.role, overall, pending.teamStrength);
+      matchWon = result.wins > 0;
+      lastMatchResult = result;
+      seasonStats = {
+        ...seasonStats,
+        kills: seasonStats.kills + result.kills,
+        deaths: seasonStats.deaths + result.deaths,
+        assists: seasonStats.assists + result.assists,
+        matchesPlayed: seasonStats.matchesPlayed + result.gamesPlayed,
+        wins: seasonStats.wins + result.wins,
+      };
+      careerStats = {
+        ...careerStats,
+        kills: careerStats.kills + result.kills,
+        deaths: careerStats.deaths + result.deaths,
+        assists: careerStats.assists + result.assists,
+        matchesPlayed: careerStats.matchesPlayed + result.gamesPlayed,
+        wins: careerStats.wins + result.wins,
+        matchesWithCurrentTeam: careerStats.matchesWithCurrentTeam + result.gamesPlayed,
+        winsWithCurrentTeam: careerStats.winsWithCurrentTeam + result.wins,
+      };
+    } else {
+      // Playoffs: the bracket run already happened at year-end (see advance()) —
+      // "matchWon" here means the run got past the first round, not just qualifying.
+      const stage = state.pendingYearSummary?.playoffStage;
+      matchWon = !!stage && stage !== "quarterfinals" && stage !== "no_qualified";
+    }
+
+    // "Se gana el evento" si sale bien la jugada personal O el equipo ganó
+    // igual — solo se pierde el evento cuando fallan las dos cosas a la vez.
+    const eventWin = personalWin || matchWon;
+    const effects = eventWin ? option.successEffects : option.failureEffects;
+
+    const attributes = { ...state.attributes };
+    for (const [key, delta] of Object.entries(effects.attributes ?? {})) {
+      attributes[key] = clamp((attributes[key] ?? STARTING_ATTRIBUTE_VALUE) + (delta ?? 0));
+    }
+    const relations = { ...state.relations };
+    for (const [key, delta] of Object.entries(effects.relations ?? {})) {
+      const k = key as keyof typeof relations;
+      relations[k] = clamp(relations[k] + (delta ?? 0));
+    }
+
+    const logEntry: DecisionLogEntry = {
+      season: state.season,
+      eventId: bigMoment.id,
+      choiceId: option.id,
+      label: option.label,
+    };
+
+    const forcedOut = relations.teamTrust <= 0 || relations.mentalHealth <= 0;
+
+    set({
+      attributes,
+      relations,
+      history: [...state.history, logEntry],
+      status: forcedOut ? "retired" : "in_season",
+      retirementReason: forcedOut ? "stats" : null,
+      lastEffects: { attributes: effects.attributes ?? {}, relations: effects.relations ?? {} },
+      lastResolution: eventWin ? option.successResolution : option.failureResolution,
+      lastMatchResult,
+      careerStats,
+      seasonStats,
+      yearSummary: state.pendingYearSummary ?? state.yearSummary,
+      pendingBigMoment: null,
+      pendingYearSummary: null,
     });
   },
 

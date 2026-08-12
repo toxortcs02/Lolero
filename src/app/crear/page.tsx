@@ -7,6 +7,7 @@ import { useTeams } from "@/hooks/useTeams";
 import { useEvents } from "@/hooks/useEvents";
 import { ROLES, ROLE_LABELS, STARTING_AGE } from "@/content/roles";
 import { ROLE_SPECIAL_ATTRIBUTES, ATTRIBUTE_LABELS } from "@/content/attributes";
+import { GAME_STYLES } from "@/content/gameStyles";
 import type { Role } from "@/types/game";
 
 export default function CrearPersonajePage() {
@@ -17,8 +18,17 @@ export default function CrearPersonajePage() {
 
   const [nick, setNick] = useState("");
   const [role, setRole] = useState<Role>("mid");
+  const [styleId, setStyleId] = useState<string | null>(null);
 
-  const canSubmit = nick.trim().length >= 2;
+  function handleRoleChange(r: Role) {
+    setRole(r);
+    setStyleId(null);
+  }
+
+  const styleOptions = GAME_STYLES[role];
+  const selectedStyle = styleOptions.find((s) => s.id === styleId) ?? null;
+
+  const canSubmit = nick.trim().length >= 2 && !!selectedStyle;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +54,7 @@ export default function CrearPersonajePage() {
         age: STARTING_AGE,
       },
       isProdigy,
+      selectedStyle?.boosts,
     );
     router.push("/carrera");
   }
@@ -74,7 +85,7 @@ export default function CrearPersonajePage() {
               <button
                 type="button"
                 key={r}
-                onClick={() => setRole(r)}
+                onClick={() => handleRoleChange(r)}
                 className={`rounded-lg border px-2 py-3 text-sm transition-colors ${
                   role === r
                     ? "border-hx-gold-bright bg-hx-gold text-hx-black"
@@ -91,6 +102,33 @@ export default function CrearPersonajePage() {
               .map((id) => ATTRIBUTE_LABELS[id])
               .join(" · ")}
           </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="hx-label text-xs font-medium">Estilo de juego</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {styleOptions.map((style) => (
+              <button
+                type="button"
+                key={style.id}
+                onClick={() => setStyleId(style.id)}
+                className={`flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors ${
+                  styleId === style.id
+                    ? "border-hx-gold-bright bg-hx-navy-light"
+                    : "border-hx-border hover:border-hx-gold"
+                }`}
+              >
+                <div>
+                  <h3 className="hx-title text-sm font-bold text-hx-gold-bright">{style.label}</h3>
+                  <p className="text-xs text-hx-grey">{style.description}</p>
+                </div>
+                <div className="mt-auto flex flex-col gap-1">
+                  <span className="hx-label text-[10px]">Campeones</span>
+                  <p className="text-xs text-hx-grey">{style.champions.join(" · ")}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         <p className="text-xs text-hx-grey">

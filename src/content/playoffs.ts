@@ -9,7 +9,7 @@ export const PLAYOFF_STAGE_LABELS: Record<PlayoffStage, string> = {
 };
 
 /** Top N of the standings make playoffs — LCK-style (6 of 10). */
-const PLAYOFF_SPOTS = 6;
+export const PLAYOFF_SPOTS = 6;
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));

@@ -89,7 +89,7 @@ body {
 }
 
 .hx-choice {
-  background: rgba(10, 30, 46, 0.6);
+  background: rgba(18, 53, 82, 0.6);
   border: 1px solid var(--color-hx-border);
   color: var(--color-hx-gold-bright);
   transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;

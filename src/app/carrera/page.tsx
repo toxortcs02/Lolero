@@ -16,7 +16,7 @@ import {
 import { PHASE_LABELS, TOURNAMENT_LABELS } from "@/content/seasonPlan";
 import { isPositiveResult } from "@/content/matchSim";
 import { getApodo } from "@/content/apodos";
-import { getFictionalOffer } from "@/content/offerFlavor";
+import { rollContract } from "@/content/contracts";
 import { getBarColor, getLolRank } from "@/content/relationBars";
 import { TeamBadge } from "@/components/TeamBadge";
 import type { TeamDefinition } from "@/content/teams";
@@ -76,6 +76,10 @@ export default function CarreraHubPage() {
     }
     if (status === "retired") {
       router.replace("/retiro");
+      return;
+    }
+    if (status === "match") {
+      router.replace("/carrera/partido");
       return;
     }
   }, [character, status, router]);
@@ -263,6 +267,11 @@ export default function CarreraHubPage() {
                             currentTeam={team}
                             choice={choice as MaterializedChoice}
                             onSelect={() => handleChoice(choice.id)}
+                            overall={overall}
+                            age={character.age}
+                            prestige={relations.prestige}
+                            fanLoyalty={relations.fanLoyalty}
+                            isChampion={currentEvent.id === "league_champion_offers"}
                           />
                         );
                       }
@@ -504,21 +513,9 @@ function TeamRosterPanel({
 
       <div className="flex flex-1 flex-col items-center justify-center gap-2  text-center">
         <div className="transition-transform duration-300 group-hover:scale-105">
-          <TeamBadge team={team} size={80} />
+          <TeamBadge team={team} size={112} />
         </div>
         <h3 className="hx-title text-base font-bold">{team.name}</h3>
-        {team.jerseyUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded URL
-          <img
-            src={team.jerseyUrl}
-            alt={`Camiseta de ${team.name}`}
-            className="h-32 w-auto rounded border border-hx-border object-contain"
-          />
-        ) : (
-          <div className="flex h-32 w-24 items-center justify-center rounded border border-dashed border-hx-border text-center text-xs text-hx-grey">
-            Sin camiseta cargada
-          </div>
-        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -692,9 +689,9 @@ function HextechBoxLoader() {
 
 function StatBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="hx-stat flex flex-col items-center gap-1 rounded-lg px-3 py-3 text-center">
+    <div className="hx-stat flex h-full min-h-[68px] flex-col items-start justify-between gap-1 rounded-lg px-3 py-3 text-left">
+      <span className="hx-label text-xs leading-tight">{label}</span>
       <span className="hx-stat-value text-2xl font-bold text-hx-gold-bright">{value}</span>
-      <span className="hx-label text-xs">{label}</span>
     </div>
   );
 }
@@ -958,14 +955,30 @@ function OfferCard({
   choice,
   onSelect,
   index = 0,
+  overall,
+  age,
+  prestige,
+  fanLoyalty,
+  isChampion = false,
 }: {
   team: TeamDefinition;
   currentTeam: TeamDefinition;
   choice: MaterializedChoice;
   onSelect: () => void;
   index?: number;
+  overall: number;
+  age: number;
+  prestige: number;
+  fanLoyalty: number;
+  isChampion?: boolean;
 }) {
-  const offer = getFictionalOffer(team);
+  const contract = rollContract(team, overall, age, {
+    prestige,
+    fanLoyalty,
+    isOpportunity: !isChampion,
+    isChampion,
+  });
+  const offer = { monthlyK: Math.round(contract.salaryPerYear / 12 / 1000), years: contract.yearsRemaining };
   const isMove = !!choice.targetTeamId;
   const strongerThanCurrent = team.baseStrength > currentTeam.baseStrength;
   const deltas = Object.entries(choice.relationEffects) as [keyof Relations, number][];
@@ -1053,8 +1066,8 @@ function Stat({
   delta?: number;
 }) {
   return (
-    <div className="hx-stat flex flex-col gap-0.5 rounded-lg px-2 py-1.5">
-      <div className="hx-label text-[9px] font-medium">{label}</div>
+    <div className="hx-stat flex h-full min-h-[52px] flex-col items-start justify-between gap-0.5 rounded-lg px-2 py-1.5 text-left">
+      <div className="hx-label text-[9px] font-medium leading-tight">{label}</div>
       <div className="flex items-baseline gap-1">
         <span className="hx-stat-value text-base font-semibold text-hx-gold-bright">
           {Math.round(value)}
