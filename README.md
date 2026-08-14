@@ -4,7 +4,7 @@ A single-player esports career simulator inspired by League of Legends' Korean c
 
 Built as a full-stack Next.js app with a Supabase backend and a from-scratch admin dashboard for managing game content without touching code.
 
-> 🎮 [Play ](#)
+> 🎮 [Play](https://lolero.vercel.app/)
 
 ---
 
@@ -61,8 +61,6 @@ src/
 supabase/
 └── migrations/             # versioned SQL schema + RLS policies
 ```
-
-See [TECHNICAL.md](./TECHNICAL.md) for how these pieces fit together.
 
 ---
 
