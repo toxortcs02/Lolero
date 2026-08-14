@@ -4,7 +4,7 @@ A single-player esports career simulator inspired by League of Legends' Korean c
 
 Built as a full-stack Next.js app with a Supabase backend and a from-scratch admin dashboard for managing game content without touching code.
 
-> 🎮 [Live demo](#) · 🛠 [Technical deep-dive](./TECHNICAL.md)
+> 🎮 [Play ](#)
 
 ---
 
