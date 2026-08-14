@@ -144,7 +144,7 @@ export const useCareerStore = create<CareerState & CareerActions>((set, get) => 
       ? rollProdigyAttributes(character.role)
       : rollStartingAttributes(character.role);
     const attributes = { ...rolled };
-    for (const [key, delta] of Object.entries(styleBoosts ?? {})) {
+    for (const [key, delta] of Object.entries(styleBoosts ?? {}) as [AttributeId, number][]) {
       attributes[key] = clamp((attributes[key] ?? STARTING_ATTRIBUTE_VALUE) + (delta ?? 0));
     }
     const overall = getOverall(attributes, character.role);
